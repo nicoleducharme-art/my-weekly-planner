@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Weekly Task Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: Serene Neutrals -->
+    <!-- Application Structure Plan: The application is designed as a single-page, interactive weekly grid, now optimized for a maximum of two days per row for improved readability on wider screens. The core interactions include typing into task fields, checking off completed items, and using a "Week of" date picker for week-specific data. Each task now features individual "Remove" buttons for fine-grained control, replacing the "Remove Last" per day. Dynamic "Add Task" buttons per day remain. Data persistence via localStorage (keyed by week) ensures plans are saved. "Print" and "Reset" buttons provide utility. This dashboard-style approach remains efficient and user-friendly for task management. -->
+    <!-- Visualization & Content Choices: The core content is the user's task list. The goal is organization and tracking. The presentation method is an interactive HTML list for each day. Interaction involves textarea input fields (auto-wrapping for long text), checkboxes for completion, and dropdowns for category selection. Tasks are color-coded by category for quick visual identification. Individual task removal buttons enhance user control. This approach, using HTML and JavaScript, is direct, efficient, and avoids unnecessary complexity from charting libraries like Chart.js or Plotly.js for this specific use case. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f7f4;
+            color: #4a4a4a;
+        }
+        .planner-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        }
+        .day-card {
+            background-color: #fafafa;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            transition: box-shadow 0.3s ease-in-out;
+        }
+        .day-card:hover {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        }
+        .task-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid #f0f0f0;
+            border-radius: 0.5rem;
+            margin-bottom: 0.25rem;
+            transition: background-color 0.2s ease;
+            position: relative; /* Needed for positioning the remove button */
+        }
+        .task-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Category specific background colors */
+        .task-item.category-general { background-color: #f9fafb; }
+        .task-item.category-personal { background-color: #eef2ff; }
+        .task-item.category-family { background-color: #ecfdf5; }
+        .task-item.category-school { background-color: #fffbeb; }
+        .task-item.category-work { background-color: #f5f3ff; }
+
+        .task-input {
+            border: none;
+            background: transparent;
+            width: 100%;
+            padding: 0.25rem;
+            outline: none;
+            transition: background-color 0.2s ease;
+            flex-grow: 1;
+            resize: none;
+            overflow: hidden;
+            min-height: 1.5rem;
+            line-height: 1.5;
+        }
+        .task-input:focus {
+            background-color: #eef2ff;
+            border-radius: 4px;
+        }
+        .task-input.completed {
+            text-decoration: line-through;
+            color: #9ca3af;
+        }
+        .checkbox {
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-top: 0.25rem;
+            margin-right: 0.5rem;
+            accent-color: #4f46e5;
+            flex-shrink: 0;
+        }
+        .category-select {
+            margin-left: 0.5rem;
+            margin-top: 0.125rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid #d1d5db;
+            background-color: #f9fafb;
+            font-size: 0.875rem;
+            color: #4a4a4a;
+            outline: none;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .category-select:focus {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+        .remove-single-task-btn {
+            background: none;
+            border: none;
+            color: #ef4444; /* Red-500 */
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 0.1rem 0.2rem;
+            line-height: 1;
+            margin-left: 0.5rem;
+            opacity: 0.6;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            flex-shrink: 0;
+        }
+        .remove-single-task-btn:hover {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+        .print-button, .clear-button, .add-task-btn {
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .print-button:hover, .clear-button:hover, .add-task-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        @media print {
+            body {
+                background-color: #fff;
+            }
+            .planner-container {
+                box-shadow: none;
+                margin: 0;
+                padding: 0;
+                border: none;
+            }
+            .no-print {
+                display: none;
+            }
+            .day-card {
+                box-shadow: none;
+                border: 1px solid #ccc;
+                page-break-inside: avoid;
+            }
+            h1, h2 {
+                color: #000 !important;
+            }
+            .task-item {
+                background-color: transparent !important;
+            }
+            textarea {
+                overflow: visible !important;
+                height: auto !important;
+            }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="planner-container">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800">Weekly Task Planner</h1>
+            <p class="text-gray-500 mt-2">Plan your week, accomplish your goals. Your tasks are saved automatically.</p>
+            <div class="mt-4 no-print">
+                <label for="week-start-date" class="text-gray-600 font-medium mr-2">Week of:</label>
+                <input type="date" id="week-start-date" class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="planner-grid">
+            <!-- Day cards will be generated by JavaScript -->
+        </div>
+
+        <div class="mt-8 flex justify-center items-center space-x-4 no-print">
+            <button id="print-btn" class="print-button bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                🖨️ Print Planner
+            </button>
+            <button id="clear-btn" class="clear-button bg-red-500 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-400">
+                🗑️ Clear All Tasks for Week
+            </button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const plannerGrid = document.getElementById('planner-grid');
+            const weekStartDateInput = document.getElementById('week-start-date');
+            const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            const categories = ['General', 'Personal', 'Family', 'School', 'Work'];
+
+            // Function to auto-resize textarea
+            function autoResizeTextarea(textarea) {
+                textarea.style.height = 'auto';
+                textarea.style.height = (textarea.scrollHeight) + 'px';
+            }
+
+            // --- Data Management Functions ---
+            function getLocalStorageKey(dateString) {
+                return `weeklyPlannerData_${dateString}`;
+            }
+
+            function savePlannerData(currentWeekData) {
+                const currentWeekDate = weekStartDateInput.value;
+                localStorage.setItem(getLocalStorageKey(currentWeekDate), JSON.stringify(currentWeekData));
+            }
+
+            function loadPlannerData(dateString) {
+                const data = localStorage.getItem(getLocalStorageKey(dateString));
+                if (data) {
+                    return JSON.parse(data);
+                } else {
+                    const initialData = {};
+                    days.forEach(day => {
+                        initialData[day.toLowerCase()] = [{ text: '', completed: false, category: 'general' }];
+                    });
+                    return initialData;
+                }
+            }
+
+            // --- UI Rendering ---
+            function renderPlanner(selectedDate) {
+                plannerGrid.innerHTML = ''; // Clear existing cards
+                const currentWeekData = loadPlannerData(selectedDate);
+
+                days.forEach(day => {
+                    const dayLower = day.toLowerCase();
+                    // Ensure dayTasks is an array, even if empty from storage
+                    const dayTasks = currentWeekData[dayLower] || []; 
+                    // Add one empty task if the day has no tasks
+                    if (dayTasks.length === 0) {
+                        dayTasks.push({ text: '', completed: false, category: 'general' });
+                    }
+
+                    const dayCard = document.createElement('div');
+                    dayCard.className = 'day-card p-4 flex flex-col';
+                    
+                    let tasksHtml = '';
+                    dayTasks.forEach((task, index) => {
+                        tasksHtml += generateTaskHtml(dayLower, index, task);
+                    });
+
+                    dayCard.innerHTML = `
+                        <h2 class="text-xl font-bold text-gray-700 mb-4 text-center">${day}</h2>
+                        <div class="tasks-list flex-grow" data-day="${dayLower}">
+                            ${tasksHtml}
+                        </div>
+                        <div class="mt-4 flex justify-end space-x-2 no-print">
+                            <button class="add-task-btn bg-green-500 text-white px-3 py-1 rounded-md text-sm hover:bg-green-600 shadow-sm transition" data-day="${dayLower}">➕ Add Task</button>
+                            <!-- Removed the "Remove Last" button -->
+                        </div>
+                    `;
+                    plannerGrid.appendChild(dayCard);
+                });
+
+                document.querySelectorAll('.task-input').forEach(textarea => {
+                    autoResizeTextarea(textarea);
+                });
+            }
+
+            function generateTaskHtml(day, index, task) {
+                const taskId = `${day}-${index}`;
+                return `
+                    <div class="task-item category-${task.category}" data-day="${day}" data-task-index="${index}">
+                        <input type="checkbox" class="checkbox" id="check-${taskId}" data-day="${day}" data-task-index="${index}" ${task.completed ? 'checked' : ''}>
+                        <textarea class="task-input ${task.completed ? 'completed' : ''}" id="input-${taskId}" data-day="${day}" data-task-index="${index}" placeholder="New task..." rows="1">${task.text}</textarea>
+                        <select class="category-select" id="cat-${taskId}" data-day="${day}" data-task-index="${index}">
+                            ${categories.map(cat => `<option value="${cat.toLowerCase()}" ${task.category === cat.toLowerCase() ? 'selected' : ''}>${cat}</option>`).join('')}
+                        </select>
+                        <button class="remove-single-task-btn" data-day="${day}" data-task-index="${index}">✖</button>
+                    </div>
+                `;
+            }
+
+            // --- Event Handlers ---
+            function handleTaskChange(e) {
+                const currentWeekDate = weekStartDateInput.value;
+                const currentWeekData = loadPlannerData(currentWeekDate);
+
+                const day = e.target.dataset.day;
+                const index = parseInt(e.target.dataset.taskIndex);
+
+                if (!currentWeekData[day]) {
+                    currentWeekData[day] = [];
+                }
+
+                // Ensure the array index exists, in case tasks are added/removed out of order
+                while (currentWeekData[day].length <= index) {
+                    currentWeekData[day].push({ text: '', completed: false, category: 'general' });
+                }
+
+                if (e.target.classList.contains('task-input')) {
+                    currentWeekData[day][index].text = e.target.value;
+                    autoResizeTextarea(e.target);
+                } else if (e.target.classList.contains('checkbox')) {
+                    currentWeekData[day][index].completed = e.target.checked;
+                    document.getElementById(`input-${day}-${index}`).classList.toggle('completed', e.target.checked);
+                } else if (e.target.classList.contains('category-select')) {
+                    const newCategory = e.target.value;
+                    currentWeekData[day][index].category = newCategory;
+                    const taskItemDiv = e.target.closest('.task-item');
+                    categories.forEach(cat => taskItemDiv.classList.remove(`category-${cat.toLowerCase()}`));
+                    taskItemDiv.classList.add(`category-${newCategory}`);
+                }
+                savePlannerData(currentWeekData);
+            }
+
+            function addTask(day) {
+                const currentWeekDate = weekStartDateInput.value;
+                const currentWeekData = loadPlannerData(currentWeekDate);
+                
+                if (!currentWeekData[day]) {
+                    currentWeekData[day] = [];
+                }
+                const newIndex = currentWeekData[day].length;
+                currentWeekData[day].push({ text: '', completed: false, category: 'general' });
+                savePlannerData(currentWeekData);
+
+                const tasksListDiv = document.querySelector(`.tasks-list[data-day="${day}"]`);
+                const newTaskHtml = generateTaskHtml(day, newIndex, { text: '', completed: false, category: 'general' });
+                tasksListDiv.insertAdjacentHTML('beforeend', newTaskHtml);
+                
+                const newTextarea = document.getElementById(`input-${day}-${newIndex}`);
+                autoResizeTextarea(newTextarea);
+            }
+
+            function removeTask(day, indexToRemove) {
+                const currentWeekDate = weekStartDateInput.value;
+                const currentWeekData = loadPlannerData(currentWeekDate);
+
+                if (currentWeekData[day] && currentWeekData[day].length > indexToRemove) {
+                    // Remove task from the data array
+                    currentWeekData[day].splice(indexToRemove, 1);
+                    savePlannerData(currentWeekData);
+
+                    // Re-render the specific day's tasks to update indices and DOM
+                    const tasksListDiv = document.querySelector(`.tasks-list[data-day="${day}"]`);
+                    let newTasksHtml = '';
+                    currentWeekData[day].forEach((task, newIndex) => {
+                        newTasksHtml += generateTaskHtml(day, newIndex, task);
+                    });
+                    tasksListDiv.innerHTML = newTasksHtml;
+
+                    // Ensure at least one task field remains if all are removed
+                    if (currentWeekData[day].length === 0) {
+                        currentWeekData[day].push({ text: '', completed: false, category: 'general' });
+                        savePlannerData(currentWeekData);
+                        tasksListDiv.insertAdjacentHTML('beforeend', generateTaskHtml(day, 0, { text: '', completed: false, category: 'general' }));
+                    }
+
+                    // Re-auto-resize all textareas for that day
+                    tasksListDiv.querySelectorAll('.task-input').forEach(textarea => {
+                        autoResizeTextarea(textarea);
+                    });
+                }
+            }
+
+            // --- Initial Setup and Global Listeners ---
+            let initialDateValue;
+            const storedDate = localStorage.getItem(getLocalStorageKey('currentSelectedWeek')); // Store current week date
+            if (storedDate) {
+                initialDateValue = storedDate;
+            } else {
+                const today = new Date();
+                const firstDayOfWeek = new Date(today.setDate(today.getDate() - (today.getDay() + 6) % 7));
+                initialDateValue = firstDayOfWeek.toISOString().slice(0, 10);
+            }
+            weekStartDateInput.value = initialDateValue;
+            renderPlanner(initialDateValue);
+
+            // Listener for date change
+            weekStartDateInput.addEventListener('change', (e) => {
+                const newDate = e.target.value;
+                localStorage.setItem(getLocalStorageKey('currentSelectedWeek'), newDate); // Save the currently selected week
+                renderPlanner(newDate);
+            });
+
+            // Delegate event listeners for task interactions
+            plannerGrid.addEventListener('input', handleTaskChange);
+            plannerGrid.addEventListener('change', handleTaskChange);
+
+            // Delegate event listeners for add/remove buttons (including new individual remove)
+            plannerGrid.addEventListener('click', (e) => {
+                if (e.target.classList.contains('add-task-btn')) {
+                    addTask(e.target.dataset.day);
+                } else if (e.target.classList.contains('remove-single-task-btn')) {
+                    const day = e.target.dataset.day;
+                    const index = parseInt(e.target.dataset.taskIndex);
+                    removeTask(day, index);
+                }
+            });
+
+            document.getElementById('print-btn').addEventListener('click', () => {
+                window.print();
+            });
+
+            document.getElementById('clear-btn').addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear all tasks for this week and reset the date? This cannot be undone.')) {
+                    const currentWeekDate = weekStartDateInput.value;
+                    localStorage.removeItem(getLocalStorageKey(currentWeekDate));
+                    // Do not clear the 'currentSelectedWeek' as it should persist.
+                    location.reload();
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
